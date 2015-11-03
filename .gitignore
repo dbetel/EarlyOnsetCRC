@@ -1,0 +1,15 @@
+# ignore results/*.xls files
+results/*.xls
+results/*.txt
+
+# ignore data/*Rdata
+data/*.RData
+data/*.Rdata
+data/*.zip
+
+# ignore in src
+
+
+# History files
+.Rhistory
+.Rapp.history
