@@ -1,71 +1,4 @@
 
-CollectSigMutatedGenes <- function(base.dir)
-  {
-    ## Column Description
-    ## N = number of sequenced bases in this gene across the individual set
-    ## n = number of (nonsilent) mutations in this gene across the individual set
-    ## npat = number of patients (individuals) with at least one nonsilent mutation
-    ## nsite = number of unique sites having a non-silent mutation
-    ## nsil = number of silent mutations in this gene across the individual set
-    ## n1 = number of nonsilent mutations of type: *CpG->T
-    ## n2 = number of nonsilent mutations of type: *Cp(A/C/T)->mut
-    ## n3 = number of nonsilent mutations of type: A->mut
-    ## n4 = number of nonsilent mutations of type: *CpG->(G/A)
-    ## n5 = number of nonsilent mutations of type: indel+null
-    ## n6 = number of nonsilent mutations of type: double_null
-    ## p_classic = p-value for the observed amount of nonsilent mutations being elevated in this gene
-    ## p_ns_s = p-value for the observed nonsilent/silent ratio being elevated in this gene
-    ## p_cons = p-value for enrichment of mutations at evolutionarily most-conserved sites in gene
-    ## p_joint = p-value for clustering + conservation
-    ## p = p-value (overall)
-    ## q = q-value, False Discovery Rate (Benjamini-Hochberg procedure)
-
-    file.path <- paste0(base.dir,"sig_genes.txt" )
-    mutated.genes <- read.table(file.path, header=TRUE, stringsAsFactors=FALSE, sep='\t')
-    mutated.genes <- mutated.genes[mutated.genes[,'q'] < 0.1, ]
-    return(mutated.genes)
-  }
-
-CollectClinicalData <- function(base.dir)
-  {
-    file.path <- paste0(base.dir, "COADREAD.merged_only_clinical_clin_format.txt")
-    patients <- read.table(file.path, header=TRUE, stringsAsFactors=FALSE, sep='\t')
-    return(patients)
-  }
-
-CollectPatientMutData <- function(base.dir)
-  {
-    ## see https://wiki.nci.nih.gov/display/TCGA/Mutation+Annotation+Format+%28MAF%29+Specification
-    ## for description of Mutation Annotation Format
-    file.path <- paste0(base.dir, "COADREAD-TP.final_analysis_set.maf")
-    patient.mutation <- read.delim(file.path, header=TRUE, stringsAsFactors=FALSE, sep='\t')
-
-    ## filter by Variant_Classification == "Silent"
-    return(patient.mutation)
-  }
-
-CollectPatientList <- function(gene, patients, n.pat)
-  {
-    ## Warning: Do not use. 
-    require("assertthat")
-    pat.subset <- patients[patients$Hugo_Symbol==gene,]
-    index1 <- pat.subset$Validation_Status == "Unknown" &
-                         pat.subset$Variant_Classification %in% c('Frame_Shift_Del', 'Frame_Shift_Ins', 'In_Frame_Del',
-                                                                'In_Frame_Ins', 'Missense_Mutation','Nonsense_Mutation',
-                                                                'Translation_Start_Site', 'Nonstop_Mutation',
-                                                                'De_novo_Start_OutOfFrame')
-    index2 <- pat.subset$Validation_Status == "Valid"
-
-    browser()
-    patient.ids <- unique(pat.subset$patient)
-
-    ##Validate that number of patients is the same as n.pat
-    are_equal(length(patient.ids), n.pat)
-
-    return(patient.ids)
-    
-  }
-
 CollectAggregateData <- function(base.dir)
   {
     ## Clinical features : start with CLI_ followed by clinical feature name ex: CLI_age.
@@ -84,39 +17,6 @@ CollectAggregateData <- function(base.dir)
 
     
     return(aggregate.features)
-  }
-
-RunSVM <- function(dd.train, permute=FALSE)
-  {
-    require(e1071)
-    ##remove all data points with no mutations
-    age.index <- grep("CLI_age", colnames(dd.train))
-    index <- apply(dd.train, 1, function(x) all(is.na(x[-age.index])))
-    dd.train <- dd.train[!index,]
-
-    ## turn mutation numbers to binary values
-    dd.train[,-age.index] <- dd.train[,-age.index] > 0 
-    if(permute){
-      dd.train[,"CLI_age"] <- sample(snp.dat[,"CLI_age"],size=length(dd.train[,"CLI_age"]), replace=FALSE)
-      ttl <- 'Classification of randomized age group'
-    } else{
-      ttl <- 'Classification by patient age'
-    }
-
-    label <- rep('old', nrow(dd.train))
-    label[dd.train$CLI_age<=50] <- 'young'
-    label <- factor(label)
-    dd.train <- cbind(label, dd.train)
-
-    model <- svm(label ~., data=dd.train[,-grep("CLI_age", colnames(dd.train))], type='C-classification',
-                 kernel='linear', scale=TRUE, cost=0.1, cross=10)
-
-    ## same as model$fitted
-    pred <- predict(model, data=dd.train[,-grep("CLI_age", colnames(dd.train))])
-    ## Check agreement with prediction
-    tab <- table(pred=pred, true=label)
-    return(tab)
-    
   }
 
 
@@ -172,27 +72,6 @@ patient.dir <- paste0(data.dir, "gdac.broadinstitute.org_COADREAD.Merge_Clinical
 aggregate.analysis.dir <- paste0(data.dir, "gdac.broadinstitute.org_COADREAD-TP.Aggregate_AnalysisFeatures.Level_4.2014101700.1.0/")
 colrs <- c("#000000", "#0000D4", "#009500", "#FFFF00", "#FF9100", "#E40000", "#546723")
 
-#########################
-## DO NOT USE: Does not output
-## correct results
-#########################
-##1. Collect significantly mutated genes
-## genes <- CollectSigMutatedGenes(mutation.dir)
-
-##2. Identify the patients with nonsilent mutations in the collected genes
-## pat <- CollectPatientMutData(mutation.dir)
-## TODO : Need to identify the patient ids with mutated genes using 'pat'
-## 'pat' contains all mutations so need to filter by Variant_classification for
-## functional mutations.
-## As validation of correct filtering the 'npat' field in genes has to match the unique number
-## of patient ids that carry mutations in this gene.
-## Build list(gene1=c(patient ids), gene2=c(patient-ids))
-## gene.patient.list <- lapply(genes$gene, function(x) CollectPatientList(x, pat, genes[genes$gene==x,'npat']) )
-## names(gene.patient.list) <- genes$gene
-##3. Collected Patients clinical data.
-##4. Build a matrix of n- patients m-mutated genes and last column is patient age
-
-################################
 
 ## Collect Aggregate data
 dd <- CollectAggregateData(aggregate.analysis.dir)
@@ -200,7 +79,6 @@ dd <- CollectAggregateData(aggregate.analysis.dir)
 somatic.mutation.genes <- colnames(dd)[grep("SMG_mutsig.2CV", colnames(dd))]
 dd.reduce <- dd[,c("CLI_age", somatic.mutation.genes)]
 dd.reduce <- dd.reduce[!is.na(dd.reduce[,"CLI_age"]),]
-## RunSVM(dd.reduce)
 
 ##remove all data points with no mutations
 age.index <- grep("CLI_age", colnames(dd.reduce))
