@@ -8,6 +8,8 @@
 # then plot 1 will go in the upper left, 2 will go in the upper right, and
 # 3 will go all the way across the bottom.
 #
+# Copied from http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_%28ggplot2%29/
+
 multiplot <- function(..., plotlist=NULL, cols=1, layout=NULL) {
   library(grid)
 

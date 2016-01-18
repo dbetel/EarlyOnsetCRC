@@ -100,7 +100,8 @@ rates[,'id'] <- names(index)
 rates[unlist(index),'age'] <- dd[names(index), 'CLI_age']
 
 plot_dd <- select(rates, name, nmut, rate_tot, rate_sil, rate_non, age) %>%
-    mutate(age_range=cut(age, breaks =c(20,50,60,70,80,100))) %>%
+    mutate(age_range=cut(age, breaks =c(20,50,60,70,80,100), labels = c('20-49', '50-59', '60-69', '70-79', '80<='),
+             right=FALSE)) %>%
     gather(key=mutation_type, value=mutation_rate, rate_sil,rate_non,rate_tot, na.rm=TRUE)
 
 PlotCorrelations <- function(x,y, title, xlab, ylab)

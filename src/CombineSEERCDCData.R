@@ -17,7 +17,7 @@ colnames(cdc) <- gsub('\\.+', '_', colnames(cdc))
 dd <- dplyr::inner_join(crc, cdc, by="FIPS")
 
 
-plot2file <- TRUE
+plot2file <- FALSE
 if(plot2file){
     pdf(paste0('../results/YoungCRCEpidemiology_', Sys.Date(), '.pdf'))
 }
@@ -31,7 +31,7 @@ dd1 <- group_by(dd,  Anatomical_location) %>%
 
 ## Chi-sequare test for differences in anatomical location
 ## between young and old.
-## transform dd1 - Note that chiseq is the same for both
+## transform dd1 - Note that chiseq is same if dd1 is defined as follows
 ## clnames <- select(dd1,Anatomical_location)
 ## dd1 <- t(select(dd1,Old, Young))
 ## colnames(dd1) <- clnames$Anatomical_location
