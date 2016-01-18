@@ -10,9 +10,9 @@ library(maptools)
 library(gpclib)
 gpclibPermit()
 source("multiplot.R")
+source("LoadPopCensus.R")
 
-
-PlotMap <- function(dd, fill_field, sfg)
+PlotMap <- function(dd, fill_field, sfg, ttl)
   {
     ## plot map using data dd field fill_field and
     ## scale_fill_gradient sfg
@@ -23,8 +23,8 @@ PlotMap <- function(dd, fill_field, sfg)
     gg <- gg + geom_map(data=dd, map=us$map,
                         aes_string(map_id='FIPS', fill=fill_field),
                         color="gray", size=0.125)
-    gg <- gg + theme(legend.text = element_text(size=7))
-    gg <- gg + sfg + labs(title=fill_field)
+    gg <- gg + theme(legend.text = element_text(size=9))
+    gg <- gg + sfg + labs(title=ttl)
     return(gg)
     
   }
@@ -40,14 +40,14 @@ PlotState <- function(dd, state, fill_field, sfg, ethnic)
                         aes_string(map_id='FIPS', fill=fill_field), color='gray')
     gg <- gg + sfg
     gg <- gg + theme(legend.position='bottom', legend.box='horizontal',
-                     legend.text = element_text(size = 7, angle=45),
+                     legend.text = element_text(size = 9, angle=45),
                      legend.key.size = unit(1.5, 'lines'))
     gg <- gg + labs(title=paste(ethnic, state, fill_field))
     return(gg)
   }
 
 
-CRCFractionCorr <- function(crc_age, crc_eth, title)
+CRCFractionCorr <- function(crc_age, crc_eth, title, x_name, y_name)
   {
    
     ## correlate CRC ratios of young and old rates
@@ -60,23 +60,33 @@ CRCFractionCorr <- function(crc_age, crc_eth, title)
 
     ## join(x=crc_eth y=crc_age)
     combn <- inner_join(crc_grp1, crc_grp2, by=c('County','FIPS')) %>%
-      select(FIPS, County, young_crc_eth= young.x, old_crc_eth= old.x,
-               young_crc_all=young.y, old_crc_all= old.y,
-               young_pop_eth=young_pop.x, old_pop_eth=old_pop.x,
-               young_pop_all=young_pop.y, old_pop_all=old_pop.y,
-               ## young_rate, old_rate,
-               fraction_ethnic= fraction.x, fraction_all= fraction.y)
+      select(FIPS, County,
+             young_crc_eth= young.x, old_crc_eth= old.x,
+             young_crc_ref=young.y, old_crc_ref= old.y,
+             young_pop_eth=young_pop.x, old_pop_eth=old_pop.x,
+             young_pop_ref=young_pop.y, old_pop_ref=old_pop.y,
+             ## young_rate, old_rate,
+             fraction_ethnic= fraction.x, fraction_ref= fraction.y) %>%
+       mutate(eth_young_rate = young_crc_eth/young_pop_eth, ref_young_rate = young_crc_ref/young_pop_ref)
 
     ## compute RMS
-    dis <- combn$fraction_ethnic - combn$fraction_all
+    dis <- combn$fraction_ethnic - combn$fraction_ref
     rms <- sqrt(mean(dis^2))
+
+    ## Wilcoxon singed-rank test
+    test <- wilcox.test(combn$eth_young_rate, combn$ref_young_rate, paired=TRUE, alt='greater')
     
     print(dim(combn))
-    p <- ggplot(combn, aes(x=fraction_all, y=fraction_ethnic)) + geom_point() + geom_smooth(method=lm, fullrange=TRUE)
+    p <- ggplot(combn, aes(x=fraction_ref, y=fraction_ethnic)) + geom_point()
+    ## p <- p + geom_smooth(method=lm, fullrange=TRUE)
     p <- p + geom_abline(intercept = 0,slope=1, colour = "red")
-    p <- p + annotate("text", label=paste0("rms=", round(rms,4)), x=min(combn$fraction_all)+0.1,y=max(combn$fraction_ethnic)-0.1, size=3.5)
+    ## p <- p + annotate("text", label=paste0("rms=", round(rms,4)), x=min(combn$fraction_ref)+0.1,y=max(combn$fraction_ethnic)-0.1, size=3.5)
+    p <- p + annotate("text", label=paste0("p-val=", format(test$p.value, scientific=T, digits=3)),
+                      x=min(combn$fraction_ref)+0.1,y=max(combn$fraction_ethnic)-0.1, size=3.5)
     p <- p + theme(aspect.ratio=1, axis.title.x=element_text(size=9, vjust=-0.6), axis.title.y=element_text(size=9))
-    p <- p + labs(title=title, x=expression("Young rate/old rate\nof entire population"), y=expression("Young rate/old rate\nof ethnic population"))
+    p <- p + labs(title=title,
+                  x=paste(x_name, "E-CRC"),
+                  y=paste(y_name, "E-CRC"))
     
     return(p)
   }
@@ -115,7 +125,6 @@ if(plot2file){
     pdf(paste0('../results/CRCAgeMaps_', Sys.Date(), '.pdf'), width=20, height=15)
 }
 
-source("LoadPopCensus.R")
 
 ######################
 ## Load CRC data for
@@ -145,6 +154,7 @@ scale_factor <- 1e5
 crc_age_adj <- mutate(crc, young_rate = scale_factor*(young/young_pop), old_rate = scale_factor*(old/old_pop))
 crc_black <- mutate(crc_black, young_rate = scale_factor*(young/young_pop), old_rate = scale_factor*(old/old_pop))
 crc_hispanic <- mutate(crc_hispanic, young_rate = scale_factor*(young/young_pop), old_rate = scale_factor*(old/old_pop))
+crc_white <- mutate(crc_white, young_rate = scale_factor*(young/young_pop), old_rate = scale_factor*(old/old_pop))
 
 require(scales)
 ecdf_crc_young_rate_Fn <- RateECDF(crc_age_adj$young_rate, crc_black$young_rate, crc_hispanic$young_rate)
@@ -174,34 +184,52 @@ sfg_young <- scale_fill_gradient(low = "#FFFFFF", high = "#A75F00", ## low = "#F
 
 ######################
 ## plot entire US young
-## and old rates
+## and old rates and ethnic population
 ######################
-populations_plots <- list(black=PlotMap(left_join(crc_black, pop_census, by='FIPS') %>%
-                            mutate(Black=(young_pop + old_pop)/TOTAL), 'Black',
-                            sfg=scale_fill_gradient(low = "#f7fbff", high = "#08306b",name='fraction')),
-                          white=PlotMap(left_join(crc_white, pop_census, by='FIPS') %>%
-                            mutate(White=(young_pop + old_pop)/TOTAL), 'White',
-                            sfg=scale_fill_gradient(low = "#f7fcf5", high = "#00441b",name='fraction')),
+populations_plots <- list(young=PlotMap(crc_age_adj, 'young_rate', sfg_young,ttl= 'Young rates - All'),
                           hispanic=PlotMap(left_join(crc_hispanic, pop_census, by='FIPS') %>%
                             mutate(Hispanic=(young_pop + old_pop)/TOTAL), 'Hispanic',
-                            sfg=scale_fill_gradient(low = "#fff5eb", high = "#7f2704",name='fraction')),
-                          old = PlotMap(crc_age_adj, 'old_rate', sfg_old),
-                          young=PlotMap(crc_age_adj, 'young_rate', sfg_young))
+                            sfg=scale_fill_gradient(low = "#fff5eb", high = "#7f2704",name='fraction'),ttl= 'Young Hispanic pop'),
+                          black=PlotMap(left_join(crc_black, pop_census, by='FIPS') %>%
+                            mutate(Black=(young_pop + old_pop)/TOTAL), 'Black',
+                            sfg=scale_fill_gradient(low = "#f7fbff", high = "#08306b",name='fraction'), ttl='Young Black pop'),
+                          old = PlotMap(crc_age_adj, 'old_rate', sfg_old, ttl='Old rates - All'),
+                          white=PlotMap(left_join(crc_white, pop_census, by='FIPS') %>%
+                            mutate(White=(young_pop + old_pop)/TOTAL), 'White',
+                            sfg=scale_fill_gradient(low = "#f7fcf5", high = "#00441b",name='fraction'), ttl='Old White Pop')
+                          )
 
-multiplot(plotlist=populations_plots, cols=2)
+## multiplot(plotlist=populations_plots, cols=2)
 
+
+######################
+## plot entire US young
+## and old rates and ethnic rates
+######################
+national_crc_rate_plots <- list(
+                          hispanic_young=PlotMap(crc_hispanic, 'young_rate',sfg_young, ttl='Hispanic E-CRC rates'),
+                          white_young=PlotMap(crc_white, 'young_rate', sfg_young, ttl='White E-CRC rates'),
+                          black_young=PlotMap(crc_black, 'young_rate', sfg_young, ttl='Black E-CRC rates'),
+                                
+                          hispanic_old=PlotMap(crc_hispanic, 'old_rate',sfg_old, ttl='Hispanic CRC rates'),
+                          white_old=PlotMap(crc_white, 'old_rate',sfg_old, ttl='White CRC rates'),
+                          black_old=PlotMap(crc_black, 'old_rate', sfg_old, ttl='Black CRC rates')
+                          )
+
+multiplot(plotlist=national_crc_rate_plots, cols=2)
 
 ######################
 ## plot by state young
 ## and old rates
 ######################
-states <- c('California', 'Connecticut', 'Michigan',
-            'Georgia', 'Hawaii', 'Iowa', 'Kentucky',
-            'Louisiana', 'New Jersey', 'New Mexico', 'Washington', 'Utah')
+## states <- c('California', 'Connecticut', 'Michigan',
+##             'Georgia', 'Hawaii', 'Iowa', 'Kentucky',
+##             'Louisiana', 'New Jersey', 'New Mexico', 'Washington', 'Utah')
 
+states <- c('California', 'Connecticut', 'New Jersey')
 
-young_state_plots <- lapply(states, function(stt) {PlotState(crc_age_adj, stt, 'young_rate', sfg_young, 'All')})
-old_state_plots <- lapply(states, function(stt) {PlotState(crc_age_adj, stt, 'old_rate', sfg_old, 'All')})
+young_state_plots <- lapply(states, function(stt) {PlotState(crc_white, stt, 'young_rate', sfg_young, 'White')})
+old_state_plots <- lapply(states, function(stt) {PlotState(crc_white, stt, 'old_rate', sfg_old, 'White')})
 black_young_state_plots <- lapply(states, function(stt) {PlotState(crc_black, stt, 'young_rate', sfg_young, 'Black')})
 black_old_state_plots <- lapply(states, function(stt) {PlotState(crc_black, stt, 'old_rate', sfg_old, 'Black')})
 hispanic_young_state_plots <- lapply(states, function(stt) {PlotState(crc_hispanic, stt, 'young_rate', sfg_young, 'Hispanic')})
@@ -217,7 +245,7 @@ sapply(1:length(states), function(i) multiplot(old_state_plots[[i]], black_old_s
 ###################
 ## plot old_rate vs. young_rate
 gg_points <- ggplot(crc_age_adj, aes(x=old_rate, y=young_rate)) + geom_point(color='red')
-print(gg_points)
+## print(gg_points)
 
 crc_age_adj_reduced <- crc_age_adj %>% select(FIPS, County, young_rate, old_rate) %>%
   tidyr::gather(group, rate, old_rate:young_rate, na.rm=TRUE)
@@ -227,7 +255,7 @@ gg_density <- gg_density + geom_histogram(aes(y=..density..,fill=group), binwidt
 gg_density <- gg_density + geom_density(aes(colour = group)) 
 gg_density <- gg_density + scale_color_manual(values=c('red', 'orange')) + scale_fill_manual(values=c('gray10', 'gray60'))
 gg_density <- gg_density + theme_bw()
-print(gg_density)
+## print(gg_density)
 
 
 ########################
@@ -236,12 +264,14 @@ print(gg_density)
 ## by ethnic groups
 ########################
 ## Correlate age-corrected rates and ethnic groups
-ethnic_plots <- list(CRCFractionCorr(crc_age_adj, crc_hispanic, title="Hispanic"),
-                     CRCFractionCorr(crc_age_adj, crc_black, title="Black"),
-                     CRCFractionCorr(crc_age_adj, crc_white, title="White")
-                     ## CRCFractionCorr(crc_age_adj, crc, title="All"),
-                     ## CRCFractionCorr(crc_white, crc_hispanic, title="White vs. Hispanic"),
-                     ## CRCFractionCorr(crc_hispanic, crc_black, title="Hispanic vs. Black")
+ethnic_plots <- list(
+                     ## CRCFractionCorr(crc_age_adj, crc_hispanic, title="Hispanic", 'All','Hispanic'),
+                     ## CRCFractionCorr(crc_age_adj, crc_black, title="Black", 'All', 'Black'),
+                     ## CRCFractionCorr(crc_age_adj, crc_white, title="White", 'All', 'White'),
+                     ## CRCFractionCorr(crc_age_adj, crc, title="All", 'All', 'All'),
+                     CRCFractionCorr(crc_white, crc_hispanic, title="White vs. Hispanic", 'White', 'Hispanic'),
+                     CRCFractionCorr(crc_white, crc_black, title="White vs. Black", 'White', 'Black')
+                     ## CRCFractionCorr(crc_hispanic, crc_black, title="Hispanic vs. Black", 'Hispanic', 'Black')
                      )
     
 multiplot(plotlist=ethnic_plots, cols=1)
