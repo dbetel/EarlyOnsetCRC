@@ -49,8 +49,8 @@ p1 <- p1 + scale_fill_brewer(palette="Spectral")
 p1 <- p1 + theme(axis.text.x = element_text(angle=45, hjust=1),
                panel.background = element_blank(),
                panel.grid.major= element_line(color='gray', linetype=2, size=0.5), legend.position='none')
-p1 <- p1 + labs(title = "Fraction of young CRC cases by anatomical location" , x = 'Anatomical Location',
-              y='Fraction of young <50 years CRC cases')
+p1 <- p1 + labs(title = "Ratios of E-CRC rates over T-CRC rates by anatomical location" , x = 'Anatomical Location',
+              y='E-CRC/T-CRC rates (age-adjusted)')
 print(p1)
 
 ## Group CRC by county and calculate mean of Smokers, Obese, Drinking and take sum of age groups
