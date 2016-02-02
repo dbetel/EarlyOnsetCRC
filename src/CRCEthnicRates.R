@@ -33,7 +33,7 @@ SummarizeAgeYearCRCRates <- function(df, eg)
   
   ## Add young and old class and summarize
   df2 <- mutate(df, Age = ifelse((Age_Group %in% c('20-24 years' ,'25-29 years' ,'30-34 years' ,
-                        '35-39 years','40-44 years', '45-49 years')), 'Young' , 'Old')) %>%
+                        '35-39 years','40-44 years', '45-49 years')), 'E-CRC' , 'T-CRC')) %>%
     select(Age_Group, Year, count, population, all_pop, Age, Ethnic_Group) %>%
     group_by(Age, Year) %>%
     summarize(count = sum(count), population=sum(population), all_pop=sum(all_pop),
@@ -44,7 +44,7 @@ SummarizeAgeYearCRCRates <- function(df, eg)
       
 }
 
-PlotData <- function(dd_x, regression_x, sf, x_pos){
+PlotData <- function(dd_x, regression_x, sf, x_pos, legend.title=NULL){
     ## dd_x - data to plot
     ## regression_x regression data_frame with Age, Etnic_Group, fit (lm model obj), Slope , Intercept
     ## sf = scaling factor
@@ -53,20 +53,25 @@ PlotData <- function(dd_x, regression_x, sf, x_pos){
     ##     do(predict.lm(fit, newdata=data.frame(Year=x_pos)))
     y_pos <- regression_x %>% do(as.data.frame(predict.lm(.$fit, newdata=data.frame(Year=x_pos))))
     dd_x <- mutate(dd_x, rate=rate*sf)
-    
     p <- ggplot(dd_x,aes( x=Year, y=rate, colour= Ethnic_Group, shape=Age))
-    p <- p + geom_point(size=3)
+    p <- p + geom_point(size=4)
     p <- p + scale_colour_hue(l=50)
     p <- p + geom_smooth(method=lm) ## note that regression is done on the colour + share grouping in ggplot
-    P <- p + scale_color_manual(values=c('green', 'blue', 'brown'))
-    
-    p <- p + annotate('text', x=2003, y=c(round(y_pos))[[1]], size=3.5,
+    p <- p + scale_color_manual(name=legend.title, values=c('#1b9e77','#d95f02', '#7570b3'))
+    p <- p + guides(shape=FALSE) ## turn off shape legend
+    p <- p + annotate('text', x=2003, y=c(round(y_pos))[[1]], size=6,
                       label=paste(regression_x$Age, regression_x$Ethnic_Group, format(round(regression_x$Slope, 3))))
     p <- p + theme_bw()
-    p <- p + labs(title=" 2000-2011 Incidents of CRC by Ethnic Group",
-                  y=expression("Age adjusted rates of CRC cases\n(per 100K)"))
-    
-    print(p)
+
+    p <- p + theme(aspect.ratio=1, axis.title.x=element_text(size=18, vjust=-0.6), axis.title.y=element_text(size=18),
+                   axis.text.x=element_text(size=18), axis.text.y=element_text(size=18),
+                   legend.position="bottom", legend.title= element_text(size=18, face='bold'),
+                   legend.text=element_text(size=18, face='bold'))
+
+    p <- p + labs(title=NULL,
+                  y=paste("Age adjusted rates of",legend.title,"cases (per 100K)"))
+    return(p)
+    ## print(p)
 
 }
 ############
@@ -84,9 +89,9 @@ hispanic <- SummarizeAgeYearCRCRates(hispanic, "Hispanic")
 
 dd <- bind_rows(white, black, hispanic)
 
-plot2file <- FALSE
+plot2file <- TRUE
 if(plot2file){
-    pdf(paste0('../results/CRC_Rates_2000To2011_', Sys.Date(), '.pdf'))
+    pdf(paste0('../results/CRC_Rates_2000To2011_', Sys.Date(), '.pdf'), width=20, height=15)
 }
 
 scale_factor <- 1e5
@@ -95,9 +100,12 @@ regressions <- dd %>% group_by(Age, Ethnic_Group) %>% do(fit=lm(rate*scale_facto
   mutate(Slope= summary(fit)$coeff[2], Intercept = summary(fit)$coeff[1])
 
 
-PlotData(dd, regressions, scale_factor, 2005)
-PlotData(filter(dd, Age=='Young'), filter(regressions, Age=='Young'), scale_factor, 2005)
-PlotData(filter(dd, Age=='Old'), filter(regressions, Age=='Old'), scale_factor, 2005)
+p <- PlotData(dd, regressions, scale_factor, 2005, 'CRC')
+## print(p)
+eCRC <- PlotData(filter(dd, Age=='E-CRC'), filter(regressions, Age=='E-CRC'), scale_factor, 2005, 'E-CRC')
+tCRC <- PlotData(filter(dd, Age=='T-CRC'), filter(regressions, Age=='T-CRC'), scale_factor, 2005, 'T-CRC')
+Title_multiplot(plotlist=list(eCRC, tCRC), cols=2,
+          ttl="Trends of Incidence of E-CRC and T-CRC by Ethnic Group from 2000-2011")
 if(plot2file){
   dev.off()
 }
