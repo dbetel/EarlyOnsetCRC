@@ -40,14 +40,15 @@ PlotState <- function(dd, state, fill_field, sfg, ethnic)
                         aes_string(map_id='FIPS', fill=fill_field), color='gray')
     gg <- gg + sfg
     gg <- gg + theme(legend.position='bottom', legend.box='horizontal',
-                     legend.text = element_text(size = 9, angle=45),
-                     legend.key.size = unit(1.5, 'lines'))
+                     legend.text = element_text(size = 9, angle=45)
+                     ## legend.key.size = unit(1.5, 'lines')
+                     )
     gg <- gg + labs(title=paste(ethnic, state, fill_field))
     return(gg)
   }
 
 
-CRCFractionCorr <- function(crc_age, crc_eth, title, x_name, y_name)
+CRCFractionCorr <- function(crc_age, crc_eth, title, x_name, y_name,  scale_factor)
   {
    
     ## correlate CRC ratios of young and old rates
@@ -67,26 +68,28 @@ CRCFractionCorr <- function(crc_age, crc_eth, title, x_name, y_name)
              young_pop_ref=young_pop.y, old_pop_ref=old_pop.y,
              ## young_rate, old_rate,
              fraction_ethnic= fraction.x, fraction_ref= fraction.y) %>%
-       mutate(eth_young_rate = young_crc_eth/young_pop_eth, ref_young_rate = young_crc_ref/young_pop_ref)
+       mutate(eth_young_rate = scale_factor*young_crc_eth/young_pop_eth, ref_young_rate = scale_factor* young_crc_ref/young_pop_ref)
 
     ## compute RMS
     dis <- combn$fraction_ethnic - combn$fraction_ref
     rms <- sqrt(mean(dis^2))
 
-    ## Wilcoxon singed-rank test
+    ## Wilcoxon signed-rank test
     test <- wilcox.test(combn$eth_young_rate, combn$ref_young_rate, paired=TRUE, alt='greater')
     
     print(dim(combn))
-    p <- ggplot(combn, aes(x=fraction_ref, y=fraction_ethnic)) + geom_point()
+    p <- ggplot(combn, aes(x=ref_young_rate, y=eth_young_rate)) + geom_point(size=3)
+    ## p <- ggplot(combn, aes(x=fraction_ref, y=fraction_ethnic)) + geom_point(size=3)
     ## p <- p + geom_smooth(method=lm, fullrange=TRUE)
     p <- p + geom_abline(intercept = 0,slope=1, colour = "red")
     ## p <- p + annotate("text", label=paste0("rms=", round(rms,4)), x=min(combn$fraction_ref)+0.1,y=max(combn$fraction_ethnic)-0.1, size=3.5)
-    p <- p + annotate("text", label=paste0("p-val=", format(test$p.value, scientific=T, digits=3)),
-                      x=min(combn$fraction_ref)+0.1,y=max(combn$fraction_ethnic)-0.1, size=3.5)
-    p <- p + theme(aspect.ratio=1, axis.title.x=element_text(size=9, vjust=-0.6), axis.title.y=element_text(size=9))
+    ## p <- p + annotate("text", label=paste0("p-val=", format(test$p.value, scientific=T, digits=3)),
+    ##                   x=min(combn$ref_young_rate) + 5,y=max(combn$eth_young_rate), size=3.5)
+    p <- p + theme(aspect.ratio=1, axis.title.x=element_text(size=18, vjust=-0.6), axis.title.y=element_text(size=18),
+                   axis.text.x=element_text(size=18), axis.text.y=element_text(size=18))
     p <- p + labs(title=title,
-                  x=paste(x_name, "E-CRC"),
-                  y=paste(y_name, "E-CRC"))
+                  x=paste('Rates of', x_name, "E-CRC (per 100K)"),
+                  y=paste('Rates of', y_name, "E-CRC (per 100K)"))
     
     return(p)
   }
@@ -216,7 +219,7 @@ national_crc_rate_plots <- list(
                           black_old=PlotMap(crc_black, 'old_rate', sfg_old, ttl='Black CRC rates')
                           )
 
-multiplot(plotlist=national_crc_rate_plots, cols=2)
+## multiplot(plotlist=national_crc_rate_plots, cols=2)
 
 ######################
 ## plot by state young
@@ -235,9 +238,9 @@ black_old_state_plots <- lapply(states, function(stt) {PlotState(crc_black, stt,
 hispanic_young_state_plots <- lapply(states, function(stt) {PlotState(crc_hispanic, stt, 'young_rate', sfg_young, 'Hispanic')})
 hispanic_old_state_plots <- lapply(states, function(stt) {PlotState(crc_hispanic, stt, 'old_rate', sfg_old, 'Hispanic')})
 
-sapply(1:length(states), function(i) multiplot(old_state_plots[[i]], black_old_state_plots[[i]], hispanic_old_state_plots[[i]],
-                                               young_state_plots[[i]],black_young_state_plots[[i]],hispanic_young_state_plots[[i]],
-                                               cols=2))
+## sapply(1:length(states), function(i) multiplot(old_state_plots[[i]], black_old_state_plots[[i]], hispanic_old_state_plots[[i]],
+##                                                young_state_plots[[i]],black_young_state_plots[[i]],hispanic_young_state_plots[[i]],
+##                                                cols=2))
 
 ###################
 ## 1. Plot old vs. young rates
@@ -269,13 +272,17 @@ ethnic_plots <- list(
                      ## CRCFractionCorr(crc_age_adj, crc_black, title="Black", 'All', 'Black'),
                      ## CRCFractionCorr(crc_age_adj, crc_white, title="White", 'All', 'White'),
                      ## CRCFractionCorr(crc_age_adj, crc, title="All", 'All', 'All'),
-                     CRCFractionCorr(crc_white, crc_hispanic, title="White vs. Hispanic", 'White', 'Hispanic'),
-                     CRCFractionCorr(crc_white, crc_black, title="White vs. Black", 'White', 'Black')
+                     CRCFractionCorr(crc_white, crc_hispanic, title=NULL, 'White', 'Hispanic', scale_factor),
+                     CRCFractionCorr(crc_white, crc_black, title=NULL, 'White', 'Black', scale_factor)
                      ## CRCFractionCorr(crc_hispanic, crc_black, title="Hispanic vs. Black", 'Hispanic', 'Black')
                      )
     
-multiplot(plotlist=ethnic_plots, cols=1)
+## multiplot(plotlist=ethnic_plots, cols=2,
+##           ttl="Comparison of E-CRC Rates by Ethnicity and Geographic Location")
 
+
+Title_multiplot(plotlist=ethnic_plots, cols=2,
+          ttl="Comparison of E-CRC Rates by Ethnicity")
 ##############
 ## close plot device
 ##############
